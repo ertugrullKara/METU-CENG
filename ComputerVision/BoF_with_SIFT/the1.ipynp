@@ -1,0 +1,374 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from PIL import Image\n",
+    "import numpy as np\n",
+    "from scipy.spatial.distance import cdist\n",
+    "\n",
+    "from cbir import CBIR\n",
+    "import convert_for_eval\n",
+    "\n",
+    "%load_ext autoreload\n",
+    "%autoreload 2"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def my_imread(impath):\n",
+    "    return np.array(Image.open(impath).convert('L'))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "with open(\"images.dat\", 'r') as f:\n",
+    "    dataset_images = list(map(str.strip, f.readlines()))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def local_descriptors(cbir):\n",
+    "    # Extract local descriptors and save them.\n",
+    "    print(\"TOTAL: {}\".format(str(len(dataset_images))))\n",
+    "    for idx,data in enumerate(dataset_images):\n",
+    "        if idx%50==10:\n",
+    "            print(idx, cbir.desc_list.shape)\n",
+    "        im = my_imread(\"dataset/\"+data)\n",
+    "        cbir.extract_features(im=im, imname=data)\n",
+    "\n",
+    "    print(\"Saving\")\n",
+    "    cbir.save_descriptors()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def extract_clusters(cluster_size):\n",
+    "    # Find cluster centers from previously extracted local descriptors.\n",
+    "    cbir.set_cluster_size(cluster_size)\n",
+    "    cbir.extract_save_clusters()\n",
+    "    cbir.bof(cluster_size)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def extract_bof(queries, desc_dict, out_file_name):\n",
+    "    for cluster_size in [32, 64, 128, 256]:\n",
+    "#         results_out = \"{}_results.out\".format(str(cluster_size))\n",
+    "        results_out = str(cluster_size)+\"_\"+out_file_name\n",
+    "        with open(results_out, 'w') as f:\n",
+    "            for query_image in queries:\n",
+    "                distance = []\n",
+    "                query_bof = desc_dict[query_image][\"{}_cluster_id\".format(str(cluster_size))]\n",
+    "                for queried_image in dataset_images:\n",
+    "                    queried_bof = desc_dict[queried_image][\"{}_cluster_id\".format(str(cluster_size))]\n",
+    "                    dist = np.sqrt(np.sum(np.square((query_bof - queried_bof))))\n",
+    "                    distance.append((queried_image, dist))\n",
+    "                distance = sorted(distance, key=lambda x: x[1])\n",
+    "                output = query_image+\":\"\n",
+    "                for out in distance:\n",
+    "                    output += \" {} {}\".format(str(out[1]), out[0])\n",
+    "                f.write(output)\n",
+    "                f.write(\"\\n\")\n",
+    "        convert_for_eval.main([None, results_out])\n",
+    "        print(\"Done\", cluster_size)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "descriptor_filename = \"sift_default.dat\"\n",
+    "cbir = CBIR(\"sift\", None, descriptor_filename)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "local_descriptors(cbir)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "for cluster_size in [32, 64, 128, 256]:\n",
+    "    extract_clusters(cluster_size)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "with open(\"validation_queries.dat\", 'r') as f:\n",
+    "    queries = list(map(str.strip, f.readlines()))\n",
+    "# cbir.load_descriptors()\n",
+    "extract_bof(queries, cbir.descriptors, \"sift_results.out\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "20% of the SIFT descriptors;\n",
+    "--\n",
+    "cluster size - mAP\n",
+    "\n",
+    "\n",
+    "256          - 0.44452\n",
+    "\n",
+    "\n",
+    "128          - 0.42560\n",
+    "\n",
+    "\n",
+    "64           - 0.38421\n",
+    "\n",
+    "\n",
+    "32           - 0.33034\n",
+    "\n",
+    "===========================\n",
+    "\n",
+    "\n",
+    "Dense SIFT Experiments\n",
+    "step: 50, size:3\n",
+    "--\n",
+    "cluster size - mAP\n",
+    "\n",
+    "\n",
+    "256          - 0.12560\n",
+    "\n",
+    "\n",
+    "128          - 0.12650\n",
+    "\n",
+    "\n",
+    "64           - 0.11975\n",
+    "\n",
+    "\n",
+    "32           - 0.11852\n",
+    "\n",
+    "\n",
+    "step: 50, size:10\n",
+    "--\n",
+    "cluster size - mAP\n",
+    "\n",
+    "\n",
+    "256          - 0.30974\n",
+    "\n",
+    "\n",
+    "128          - 0.29594\n",
+    "\n",
+    "\n",
+    "64           - 0.27251\n",
+    "\n",
+    "\n",
+    "32           - 0.23548\n",
+    "\n",
+    "\n",
+    "step: 50, size:30\n",
+    "--\n",
+    "\n",
+    "\n",
+    "less descriptors but takes a lot more to extract descriptors.\n",
+    "\n",
+    "\n",
+    "cluster size - mAP\n",
+    "\n",
+    "\n",
+    "256          - 0.37484\n",
+    "\n",
+    "\n",
+    "128          - 0.34290\n",
+    "\n",
+    "\n",
+    "64           - 0.30083\n",
+    "\n",
+    "\n",
+    "32           - 0.27143\n",
+    "\n",
+    "======\n",
+    "\n",
+    "more than 4M data points.\n",
+    "---\n",
+    "step: 10, size:4\n",
+    "--\n",
+    "\n",
+    "\n",
+    "less descriptors but takes a lot more to extract descriptors.\n",
+    "\n",
+    "\n",
+    "cluster size - mAP\n",
+    "\n",
+    "\n",
+    "256          - *\n",
+    "\n",
+    "\n",
+    "128          - 0.44493\n",
+    "\n",
+    "\n",
+    "64           - 0.40629\n",
+    "\n",
+    "\n",
+    "32           - 0.37146\n",
+    "\n",
+    "\n",
+    "step: 10, size:8\n",
+    "--\n",
+    "\n",
+    "\n",
+    "less descriptors but takes a lot more to extract descriptors.\n",
+    "\n",
+    "\n",
+    "cluster size - mAP\n",
+    "\n",
+    "\n",
+    "256          - 0.45093\n",
+    "\n",
+    "\n",
+    "128          - 0.43101\n",
+    "\n",
+    "\n",
+    "64           - 0.40156\n",
+    "\n",
+    "\n",
+    "32           - 0.35849\n",
+    "\n",
+    "\n",
+    "step: 10, size:12\n",
+    "--\n",
+    "\n",
+    "\n",
+    "less descriptors but takes a lot more to extract descriptors.\n",
+    "\n",
+    "\n",
+    "cluster size - mAP\n",
+    "\n",
+    "\n",
+    "256          - 0.47443\n",
+    "\n",
+    "\n",
+    "128          - 0.44706\n",
+    "\n",
+    "\n",
+    "64           - 0.40657\n",
+    "\n",
+    "\n",
+    "32           - 0.34760"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Extracting descriptors.\n",
+      "(4395384, 128)\n",
+      "Extracting clusters. Step:10, Size:4, ClusterSize:256\n",
+      "Extracting cluster centers.\n"
+     ]
+    }
+   ],
+   "source": [
+    "with open(\"validation_queries.dat\", 'r') as f:\n",
+    "    queries = list(map(str.strip, f.readlines()))\n",
+    "# Extract all\n",
+    "step = 10\n",
+    "for size in [4, 8, 12]:\n",
+    "    if size != 4:\n",
+    "        continue\n",
+    "    descriptor_filename = \"dsift_default_{}.dat\".format(str(step)+\"_\"+str(size))\n",
+    "    cbir = CBIR(\"dsift\", None, descriptor_filename, step=step, size=size)\n",
+    "#     local_descriptors(cbir)\n",
+    "    cbir.load_descriptors()\n",
+    "    for cluster_size in [32, 64, 128, 256]:\n",
+    "        if cluster_size != 256:\n",
+    "            continue\n",
+    "        print(\"Extracting clusters. Step:{}, Size:{}, ClusterSize:{}\".format(str(step), str(size), str(cluster_size)))\n",
+    "        extract_clusters(cluster_size)\n",
+    "    extract_bof(queries, cbir.descriptors, \"dsift_results_{}_{}.out\".format(str(step), str(size)))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Extracting descriptors.\n",
+      "Done 32\n",
+      "Done 64\n",
+      "Done 128\n",
+      "Done 256\n"
+     ]
+    }
+   ],
+   "source": [
+    "with open(\"test_queries.dat\", 'r') as f:\n",
+    "    queries = list(map(str.strip, f.readlines()))\n",
+    "descriptor_filename = \"dsift_default_{}.dat\".format(str(10)+\"_\"+str(12))\n",
+    "cbir = CBIR(\"dsift\", None, descriptor_filename, step=10, size=12)\n",
+    "cbir.load_descriptors()\n",
+    "extract_bof(queries, cbir.descriptors, \"dsift_testresults_10_12.out\")"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.4"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
