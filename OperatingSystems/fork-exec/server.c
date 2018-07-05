@@ -65,6 +65,7 @@ void _free2dArrayInt(int dim, int **twodimarr)
 
 void _beforeExit()
 {
+    // return;
     int num_fds = (num_hunters+num_preys);
     int i;
     _free2dArrayChar(width, map);
